@@ -1,0 +1,9 @@
+flask==3.0.3
+flask-socketio==5.3.6
+opencv-python-headless==4.10.0.84
+tensorflow==2.16.1
+scipy==1.13.1
+numpy==1.26.4
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+eventlet==0.36.1

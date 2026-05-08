@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>A-EYE Guard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --orange:       #f29422;
+      --orange-light: #fff4e0;
+      --orange-mid:   #fde4b8;
+      --sky:          #00b5f8;
+      --sky-light:    #e0f7ff;
+      --teal:         #06b2d8;
+      --teal-light:   #e0f9ff;
+      --navy:         #063b87;
+      --navy-light:   #e8eef8;
+      --red:          #d95525;
+      --red-light:    #fff0ec;
+      --green:        #07a66b;
+      --green-light:  #e6fff5;
+      --bg:           #f0f6ff;
+      --panel:        #ffffff;
+      --border:       #c8dff6;
+      --text:         #063b87;
+      --muted:        #5a7aaa;
+      --font-h:       'Nunito', sans-serif;
+      --font-b:       'Poppins', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle at 10% 20%, rgba(0,181,248,.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(242,148,34,.08) 0%, transparent 40%);
+      color: var(--text);
+      font-family: var(--font-b);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 3rem;
+    }
+
+    /* ── Header ── */
+    header {
+      width: 100%; max-width: 980px;
+      text-align: center; margin-bottom: 2rem;
+    }
+    .header-logo {
+      width: 68px; height: 68px; border-radius: 50%;
+      background: var(--navy);
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: .8rem;
+      box-shadow: 0 4px 20px rgba(6,59,135,.25);
+    }
+    .header-logo svg { width: 34px; height: 34px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    header h1 {
+      font-family: var(--font-h); font-size: 2rem; font-weight: 900;
+      color: var(--navy); letter-spacing: -.01em;
+    }
+    header h1 span { color: var(--orange); }
+    header p { font-size: .82rem; color: var(--muted); margin-top: .3rem; font-family: var(--font-b); }
+
+    /* ── Main grid ── */
+    .main {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 1.4rem; width: 100%; max-width: 980px;
+    }
+    @media (max-width: 720px) {
+      .main { grid-template-columns: 1fr; }
+      header h1 { font-size: 1.5rem; }
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--panel); border: 1.5px solid var(--border);
+      border-radius: 20px; padding: 1.4rem;
+      box-shadow: 0 2px 16px rgba(6,59,135,.06);
+    }
+    .panel-label {
+      font-family: var(--font-h); font-size: .72rem; font-weight: 800;
+      color: var(--teal); letter-spacing: .18em; text-transform: uppercase;
+      border-bottom: 1.5px solid var(--border);
+      padding-bottom: .6rem; margin-bottom: 1.1rem;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .panel-label svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Camera ── */
+    .camera-wrap {
+      position: relative; aspect-ratio: 4/3;
+      background: linear-gradient(145deg, #dceeff 0%, #c8e6ff 100%);
+      border-radius: 14px; overflow: hidden; border: 2px solid var(--border);
+    }
+    #video {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; object-fit: cover; visibility: hidden;
+    }
+    #overlay {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; display: block;
+    }
+    .corner { position: absolute; width: 20px; height: 20px; border-color: var(--orange); border-style: solid; opacity: .9; z-index: 2; pointer-events: none; }
+    .c-tl { top:10px; left:10px;   border-width: 2.5px 0 0 2.5px; border-radius: 3px 0 0 0; }
+    .c-tr { top:10px; right:10px;  border-width: 2.5px 2.5px 0 0; border-radius: 0 3px 0 0; }
+    .c-bl { bottom:10px; left:10px;  border-width: 0 0 2.5px 2.5px; border-radius: 0 0 0 3px; }
+    .c-br { bottom:10px; right:10px; border-width: 0 2.5px 2.5px 0; border-radius: 0 0 3px 0; }
+
+    @keyframes scan { 0%{top:0} 100%{top:100%} }
+    .scan-line {
+      position: absolute; left: 0; width: 100%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--sky), transparent);
+      animation: scan 3s linear infinite; opacity: .5; z-index: 2; pointer-events: none;
+    }
+
+    /* ── Face indicator ── */
+    .face-badge {
+      margin-top: .75rem; padding: .45rem .9rem; border-radius: 999px;
+      font-size: .75rem; font-weight: 700; font-family: var(--font-h);
+      text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: all .3s;
+    }
+    .face-badge.ok   { background: var(--green-light); color: var(--green); border: 1.5px solid #a0e8c8; }
+    .face-badge.fail { background: var(--red-light);   color: var(--red);   border: 1.5px solid #f5c0aa; }
+
+    .tips-row { display: flex; gap: .5rem; margin-top: .8rem; }
+    .tip-chip {
+      flex: 1; background: var(--teal-light); border: 1px solid #9ee5f4;
+      border-radius: 10px; padding: .5rem .4rem; text-align: center;
+      font-size: .65rem; color: #066880; font-weight: 700; font-family: var(--font-h);
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .tip-chip svg { width: 16px; height: 16px; fill: none; stroke: var(--teal); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Mode switch ── */
+    .mode-switch {
+      display: flex; gap: .4rem; background: var(--navy-light);
+      border-radius: 12px; padding: 4px; margin-bottom: 1.2rem;
+    }
+    .mode-btn {
+      flex: 1; padding: .52rem .5rem; font-family: var(--font-h);
+      font-size: .82rem; font-weight: 800; border: none;
+      background: transparent; color: var(--muted); border-radius: 9px;
+      cursor: pointer; transition: all .22s;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+    }
+    .mode-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .mode-btn.active { background: var(--navy); color: #fff; box-shadow: 0 2px 10px rgba(6,59,135,.2); }
+
+    /* ── Form ── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+    .form-group { display: flex; flex-direction: column; gap: .28rem; }
+    .form-group.full { grid-column: 1 / -1; }
+    label {
+      font-size: .67rem; font-weight: 700; color: var(--muted);
+      letter-spacing: .1em; text-transform: uppercase; font-family: var(--font-h);
+    }
+    .req { color: var(--red); margin-left: 2px; }
+    .fv-input {
+      background: var(--sky-light); border: 1.5px solid var(--border);
+      border-radius: 9px; padding: .52rem .72rem; color: var(--navy);
+      font-size: .88rem; outline: none;
+      transition: border-color .2s, box-shadow .2s; font-family: var(--font-b);
+    }
+    .fv-input:focus { border-color: var(--sky); box-shadow: 0 0 0 3px rgba(0,181,248,.12); }
+    .fv-input::placeholder { color: #9ab5d4; }
+
+    /* ── Buttons ── */
+    .btn-reg {
+      width: 100%; margin-top: .9rem; padding: .78rem;
+      font-size: .95rem; font-weight: 800; font-family: var(--font-h);
+      border: none; border-radius: 12px; cursor: pointer;
+      background: var(--navy); color: #fff;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      box-shadow: 0 4px 14px rgba(6,59,135,.25);
+      transition: opacity .2s, transform .15s;
+    }
+    .btn-reg:hover  { opacity: .88; transform: translateY(-1px); }
+    .btn-reg:active { transform: scale(.98); }
+    .btn-reg:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-reg svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .btn-verify {
+      width: 100%; padding: .8rem; font-size: 1rem; font-weight: 800;
+      font-family: var(--font-h); border: none; border-radius: 12px; cursor: pointer;
+      background: var(--orange); color: #fff;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      box-shadow: 0 4px 14px rgba(242,148,34,.3);
+      transition: opacity .2s, transform .15s;
+    }
+    .btn-verify:hover  { opacity: .88; transform: translateY(-1px); }
+    .btn-verify:active { transform: scale(.98); }
+    .btn-verify:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-verify svg { width: 19px; height: 19px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Verify prompt ── */
+    .verify-prompt { text-align: center; padding: 1.5rem .5rem 1.2rem; }
+    .verify-icon-wrap {
+      width: 66px; height: 66px; border-radius: 50%;
+      background: var(--orange-light); border: 2px solid var(--orange-mid);
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: .8rem;
+    }
+    .verify-icon-wrap svg { width: 30px; height: 30px; fill: none; stroke: var(--orange); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .verify-prompt p { font-size: .82rem; color: var(--muted); line-height: 1.6; font-family: var(--font-b); }
+
+    /* ── Result box ── */
+    .result-box {
+      display: none; margin-top: .9rem; padding: 1rem 1.1rem;
+      border-radius: 12px; font-size: .88rem; font-weight: 600;
+      font-family: var(--font-b); text-align: center; line-height: 1.6;
+    }
+    .result-ok   { background: var(--green-light); border: 1.5px solid #a0e8c8; color: var(--green); display: block; }
+    .result-fail { background: var(--red-light);   border: 1.5px solid #f5c0aa; color: var(--red);   display: block; }
+    .person-info {
+      display: block; font-family: var(--font-b);
+      font-size: .78rem; color: var(--muted); margin-top: .4rem;
+    }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 2.5rem; font-size: .72rem; color: var(--muted);
+      text-align: center; font-family: var(--font-b);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-logo">
+    <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+  </div>
+  <h1>A-EYE <span>Guard</span></h1>
+</header>
+
+<div class="main">
+
+  <!-- ── Camera panel ── -->
+  <div class="panel">
+    <div class="panel-label">
+      <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="12" cy="14" r="3"/></svg>
+      Live Feed
+    </div>
+
+    <div class="camera-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="scan-line"></div>
+      <div class="corner c-tl"></div>
+      <div class="corner c-tr"></div>
+      <div class="corner c-bl"></div>
+      <div class="corner c-br"></div>
+    </div>
+
+    <div id="face-indicator" class="face-badge fail">
+      <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round">
+        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/>
+      </svg>
+      No Face Detected
+    </div>
+
+    <div class="tips-row">
+      <div class="tip-chip">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
+        Good Light
+      </div>
+      <div class="tip-chip">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Face Forward
+      </div>
+      <div class="tip-chip">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Stay Still
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Control panel ── -->
+  <div class="panel">
+    <div class="panel-label">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      Control
+    </div>
+
+    <!-- Mode switch -->
+    <div class="mode-switch">
+      <button id="mode-verify" class="mode-btn active">
+        <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Verify
+      </button>
+      <button id="mode-register" class="mode-btn">
+        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        Register
+      </button>
+    </div>
+
+    <!-- ═══ REGISTER FORM ═══ -->
+    <div id="register-form" style="display:none">
+      <div class="form-grid">
+
+        <div class="form-group">
+          <label for="first_name">Child's First Name <span class="req">*</span></label>
+          <input type="text" id="first_name" class="fv-input" placeholder="Sara"/>
+        </div>
+
+        <div class="form-group">
+          <label for="last_name">Child's Last Name <span class="req">*</span></label>
+          <input type="text" id="last_name" class="fv-input" placeholder="Hassan"/>
+        </div>
+
+        <div class="form-group full">
+          <label for="national_id">National ID <span class="req">*</span></label>
+          <input type="text" id="national_id" class="fv-input" placeholder="29901011234567"/>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" class="fv-input" placeholder="a@example.com"/>
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Phone</label>
+          <input type="tel" id="phone" class="fv-input" placeholder="+20 10x xxx xxxx"/>
+        </div>
+
+      </div>
+
+      <button id="capture-btn" class="btn-reg">
+        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="12" cy="14" r="3"/></svg>
+        Capture &amp; Register
+      </button>
+    </div>
+
+    <!-- ═══ VERIFY SECTION ═══ -->
+    <div id="verify-section">
+      <div class="verify-prompt">
+        <div class="verify-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <p>Position your face clearly in the camera,<br>then press <strong>Verify Identity</strong>.</p>
+      </div>
+      <button id="verify-btn" class="btn-verify">
+        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Verify Identity
+      </button>
+    </div>
+
+    <!-- Result -->
+    <div id="result-box" class="result-box"></div>
+
+  </div>
+</div>
+
+
+
+<script src="/static/script.js"></script>
+</body>
+</html>

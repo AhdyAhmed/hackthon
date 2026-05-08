@@ -1,0 +1,49 @@
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: aeye_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-face_verify}
+      POSTGRES_USER:     ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-face_verify}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aeye_net
+
+  # ── A-EYE Guard app ──────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aeye_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST:     db
+      DB_PORT:     5432
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./persons:/app/persons              # persisted face photos
+      - ./certificates:/app/certificates    # SSL cert + key (mount your own)
+    networks:
+      - aeye_net
+
+volumes:
+  postgres_data:
+
+networks:
+  aeye_net:
+    driver: bridge
